@@ -1,0 +1,157 @@
+!pip install langchain==0.1.16 langchain-openai==0.1.7a
+from google.colab import files
+files.upload()
+import json
+
+with open("flights.json") as f:
+    flights = json.load(f)
+
+with open("hotels.json") as f:
+    hotels = json.load(f)
+
+with open("places.json") as f:
+    places = json.load(f)
+
+print(len(flights), len(hotels), len(places))
+from langchain.tools import tool
+from langchain_openai import ChatOpenAI
+from langchain.agents import AgentExecutor, create_tool_calling_agent
+from langchain.prompts import ChatPromptTemplate
+import os
+from langchain.tools import tool
+@tool
+def flight_search_tool(source: str, destination: str) -> dict:
+    """
+    Finds the cheapest available flight between source and destination cities.
+    """
+    matches = [
+        f for f in flights
+        if f["from"].lower() == source.lower()
+        and f["to"].lower() == destination.lower()
+    ]
+    if not matches:
+        return {"error": "No flight available"}
+    return min(matches, key=lambda x: x["price"])
+@tool
+def hotel_recommendation_tool(city: str) -> dict:
+    """
+    Recommends the best hotel in a city based on star rating and price.
+    """
+    matches = [h for h in hotels if h["city"].lower() == city.lower()]
+    if not matches:
+        return {"error": "No hotel available"}
+    return sorted(matches, key=lambda x: (-x["stars"], x["price_per_night"]))[0]
+@tool
+def places_recommendation_tool(city: str) -> list:
+    """
+    Returns the top-rated tourist places in the given city.
+    """
+    matches = [p for p in places if p["city"].lower() == city.lower()]
+    return sorted(matches, key=lambda x: -x["rating"])[:5]
+@tool
+def budget_estimation_tool(flight_price: int, hotel_price: int, days: int) -> int:
+    """
+    Calculates total estimated travel budget.
+    """
+    return flight_price + (hotel_price * days) + (days * 800)
+tools = [
+    flight_search_tool,
+    hotel_recommendation_tool,
+    places_recommendation_tool,
+    budget_estimation_tool
+]
+os.environ["OPENAI_API_KEY"] = "use api key"
+from langchain_openai import ChatOpenAI
+from langchain.agents import AgentExecutor, create_tool_calling_agent
+from langchain.prompts import ChatPromptTemplate
+import os
+
+# Set your OpenAI API key
+os.environ["OPENAI_API_KEY"] = "PASTE_YOUR_API_KEY_HERE"
+
+prompt = ChatPromptTemplate.from_messages([
+    ("system", "You are an intelligent AI travel planner. Use tools to plan trips."),
+    ("human", "{input}"),
+    ("placeholder", "{agent_scratchpad}")
+])
+
+llm = ChatOpenAI(model="gpt-3.5-turbo", temperature=0)
+agent = create_tool_calling_agent(
+    llm=llm,
+    tools=tools,
+    prompt=prompt
+)
+
+agent_executor = AgentExecutor(
+    agent=agent,
+    tools=tools,
+    verbose=True
+)
+print("Agent Output (Simulated):")
+
+{
+  "Trip": "3-day trip from Hyderabad to Goa",
+  "Flight": "Air India – ₹7299",
+  "Hotel": "Royal Heritage – ₹1232/night",
+  "Places": [
+    "Famous Park",
+    "Beautiful Park",
+    "Popular Lake",
+    "Historic Park",
+    "Beautiful Lake"
+  ],
+  "Total Budget": 11395,
+  "Reasoning": "Cheapest flight, best-rated hotel, top tourist attractions"
+}
+def get_trip_output(source, destination, days):
+    # Flight
+    flight = min(
+        [f for f in flights if f["from"] == source and f["to"] == destination],
+        key=lambda x: x["price"],
+        default=None
+    )
+
+    # Hotel
+    hotel = sorted(
+        [h for h in hotels if h["city"] == destination],
+        key=lambda x: (-x["stars"], x["price_per_night"]),
+        reverse=False
+    )[0]
+
+    # Places
+    place_list = sorted(
+        [p for p in places if p["city"] == destination],
+        key=lambda x: -x["rating"]
+    )[:5]
+
+    total_budget = flight["price"] + (hotel["price_per_night"] * days) + (days * 800)
+
+    return {
+        "Trip": f"{days}-day trip from {source} to {destination}",
+        "Flight": flight,
+        "Hotel": hotel,
+        "Places": [p["name"] for p in place_list],
+        "Total Budget": total_budget
+    }
+output = get_trip_output("Hyderabad", "Goa", 3)
+output
+{'Trip': '3-day trip from Hyderabad to Goa',
+ 'Flight': {'flight_id': 'FL0016',
+  'airline': 'Air India',
+  'from': 'Hyderabad',
+  'to': 'Goa',
+  'departure_time': '2025-08-28T14:26:00',
+  'arrival_time': '2025-08-28T18:26:00',
+  'price': 7299},
+ 'Hotel': {'hotel_id': 'HOT0014',
+  'name': 'Royal Heritage',
+  'city': 'Goa',
+  'stars': 5,
+  'price_per_night': 1232,
+  'amenities': ['wifi', 'parking', 'breakfast', 'pool']},
+ 'Places': ['Famous Park',
+  'Beautiful Park',
+  'Popular Lake',
+  'Historic Park',
+  'Beautiful Lake'],
+ 'Total Budget': 13395}
